@@ -5,6 +5,7 @@
 // [v1.5] - 7/10/24 - expand # of channels to 15
 // [v2.0] - 6/21/25 - Updates for larger screen, saving LKG, etc
 // [v2.01] - 8/15/25 - Fix "black" color for background for display 
+// [v2.1] - 3/8/26 - Updates for new baseboard and other tweaks for 3.2" display
 
 #include <FlashAsEEPROM.h>
 
@@ -19,9 +20,7 @@
 #include <Adafruit_FT6206.h>
 
 // BS_VERSION - Basestation Version string
-static const char* BS_VERSION = "v2.01";
-
-#define LOCAL_GPS_BAUD  38400 // set to either 9600 for BN series GPS module, or 38400 for BE series
+static const char* BS_VERSION = "v2.1";
 
 #define MAX_DISTANCE  100000
 
@@ -139,9 +138,6 @@ Adafruit_FT6206 ts = Adafruit_FT6206();
 QMC5883LCompass compass;
 #endif
 
-// Button object = Pin 11
-//Button button = Button(A5,PULLUP);
-
 // Menu definitions
 enum{TRACKER_MENU=0, RADIO_GPS_MENU,  LOCAL_GPS_MENU };
 
@@ -233,8 +229,8 @@ void setup() {
   pinMode(LED, OUTPUT);
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
-  pinMode(TOUCH_RESET, OUTPUT);
-  digitalWrite(TOUCH_RESET, HIGH);
+  pinMode(TOUCH_RESET, OUTPUT); // [v2.1] - set reset pin high for touch screen reset
+  digitalWrite(TOUCH_RESET, HIGH);  // [v2.1]
 
 #ifdef SERIAL_CONSOLE
   // Open serial communications to console
@@ -247,7 +243,7 @@ void setup() {
 
 #ifdef LOCAL_GPS
   // Initial GPS Port
-  Serial1.begin(LOCAL_GPS_BAUD);
+  Serial1.begin(9600);
 #endif
 
 #ifdef COMPASS
@@ -257,11 +253,12 @@ void setup() {
   //compass.setCalibration(-686, 797, -1171, 267, -1237, 0);    // SN #2 (Paul)
   //compass.setCalibration(-498, 1013, -1135, 355, -1242, 0);    // SN #3 (Dave)
   //compass.setCalibration(-713, 2007, -1826, 968, -1460, 0);    // SN #4 (Val)
-  //compass.setCalibration(-942, 377, -1101, 280, -1227, 0);     // SN #5 (Mike M)  
+  //compass.setCalibration(-1372, 1062, -1637, 1046, -1691, 0);     // SN #5 (Mike M)  
   //compass.setCalibration(-797, 603, -1041, 372, -1155, 0);    // SN #6 (Ron R)
   //compass.setCalibration(-1073, 352, -892, 536, -1133, 0);    // SN #7 (Jim M)
   //compass.setCalibration(-722, 782, -861, 851, -1307, 0);       // SN #9 (me- 2)
-  compass.setCalibration(-1027, 1211, -405, 1931, -2328, 0);  // SN #9 (me- 2)
+  //compass.setCalibration(-1027, 1211, -405, 1931, -2328, 0);  // SN #9 (me- 2)
+  compass.setCalibration(-1421, 585, -1468, 373, -707, 0);  // SN #10 (Paul #2)
   
 #endif
 
