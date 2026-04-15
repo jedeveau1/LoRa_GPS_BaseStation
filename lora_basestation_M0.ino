@@ -3,6 +3,7 @@
 // [v1.3] - 1/31/22 - Changed for SN#2 and beyond - fixed color bitmap
 // [v1.35] - 1/4/23 - add version info and fix bug for basestation GPS not updating without remote GPS update
 // [v1.5] - 7/10/24 - expand # of channels to 15
+// [v1.51] - 3/5/26 - Make Chan 12 and 13 operate at SF=9 so that two systems can operate without interference
 
 #include <FlashAsEEPROM.h>
 
@@ -15,7 +16,7 @@
 #include <Button.h>
 
 // BS_VERSION - Basestation Version string
-static const char* BS_VERSION = "v1.5";
+static const char* BS_VERSION = "v1.51";
 
 // for Feather32u4 RFM9x
 //#define RFM95_CS 8
@@ -113,9 +114,9 @@ Button button = Button(A5,PULLUP);
 #define RF95_FREQ_8 903.1
 #define RF95_FREQ_9 904.7
 #define RF95_FREQ_10 906.3
-#define RF95_FREQ_11 907.9
-#define RF95_FREQ_12 909.5
-#define RF95_FREQ_13 911.1
+#define RF95_FREQ_11 907.9  
+#define RF95_FREQ_12 909.5  // [v1.51]
+#define RF95_FREQ_13 911.1  // [v1.51]
 #define RF95_FREQ_14 912.7
 
 float RF95_FREQ;
@@ -254,6 +255,12 @@ void setup() {
     Serial.println("Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info");
 #endif
     while (1);
+  }
+
+  // [v1.51] - If chan = 12 or 13, change the SF to 9 
+  if((RF95_FREQ == RF95_FREQ_12) || (RF95_FREQ == RF95_FREQ_13))
+  {
+    rf95.setModemConfig(RH_RF95::Bw125Cr45Sf512);
   }
 
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
