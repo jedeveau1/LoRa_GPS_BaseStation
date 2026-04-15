@@ -1,6 +1,8 @@
-// v1.1 - first fielded version
-// v1.2 - Changed SF = 10
-// v1.3 - Changed for SN#2 and beyond - fixed color bitmap
+// [v1.1] - first fielded version
+// [v1.2] - Changed SF = 10
+// [v1.3] - 1/31/22 - Changed for SN#2 and beyond - fixed color bitmap
+// [v1.35] - 1/4/23 - add version info and fix bug for basestation GPS not updating without remote GPS update
+// [v1.5] - 7/10/24 - expand # of channels to 15
 
 #include <FlashAsEEPROM.h>
 
@@ -11,6 +13,9 @@
 #include <RH_RF95.h>
 #include <QMC5883LCompass.h>
 #include <Button.h>
+
+// BS_VERSION - Basestation Version string
+static const char* BS_VERSION = "v1.5";
 
 // for Feather32u4 RFM9x
 //#define RFM95_CS 8
@@ -105,8 +110,17 @@ Button button = Button(A5,PULLUP);
 #define RF95_FREQ_5 910.3
 #define RF95_FREQ_6 911.9
 #define RF95_FREQ_7 913.5
+#define RF95_FREQ_8 903.1
+#define RF95_FREQ_9 904.7
+#define RF95_FREQ_10 906.3
+#define RF95_FREQ_11 907.9
+#define RF95_FREQ_12 909.5
+#define RF95_FREQ_13 911.1
+#define RF95_FREQ_14 912.7
 
 float RF95_FREQ;
+
+#define MAX_OP_CHAN 14
 
 // Singleton instance of the radio driver
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
@@ -122,6 +136,8 @@ int radio_channel;
 
 //max altitude indicator
 int max_altitude = 0;
+
+static bool usingLKG; // Last-Known-Good position indicator
 
 void setup() {
   pinMode(LED, OUTPUT);
@@ -145,8 +161,14 @@ void setup() {
 #ifdef COMPASS
   //init compass
   compass.init();
-  //compass.setCalibration(-336, 1190, -1160, 352, -1322, 0);   // SN #1
-  compass.setCalibration(-686, 797, -1171, 267, -1237, 0);    // SN #2
+  compass.setCalibration(-336, 1190, -1160, 352, -1322, 0);   // SN #1 (me)
+  //compass.setCalibration(-686, 797, -1171, 267, -1237, 0);    // SN #2 (Paul)
+  //compass.setCalibration(-498, 1013, -1135, 355, -1242, 0);    // SN #3 (Dave)
+  //compass.setCalibration(-713, 2007, -1826, 968, -1460, 0);    // SN #4 (Val)
+  //compass.setCalibration(-942, 377, -1101, 280, -1227, 0);     // SN #5 (Mike M)  
+  //compass.setCalibration(-797, 603, -1041, 372, -1155, 0);    // SN #6 (Ron R)
+  //compass.setCalibration(-1073, 352, -892, 536, -1133, 0);    // SN #7 (Jim M)
+
 
 #endif
 
@@ -157,6 +179,7 @@ void setup() {
 #ifdef LCD_DISPLAY
  // Use this initializer if using a 1.8" TFT screen:
   tft.initR(INITR_BLACKTAB);      // Init ST7735S chip, black tab
+ // tft.invertDisplay(true);  // include this if the display is inverted
 
 #endif
 
@@ -166,6 +189,7 @@ void setup() {
   Serial.print("Read Radio Chan: ");
   Serial.println(radio_channel);
   
+  // v1.5 - Expand number of channels
   switch(radio_channel){
     case 0:
 	    RF95_FREQ = RF95_FREQ_0;
@@ -191,6 +215,27 @@ void setup() {
     case 7:
 	    RF95_FREQ = RF95_FREQ_7;
 	    break;
+    case 8:
+      RF95_FREQ = RF95_FREQ_8;
+      break;
+    case 9:
+      RF95_FREQ = RF95_FREQ_9;
+      break;
+    case 10:
+      RF95_FREQ = RF95_FREQ_10;
+      break;
+    case 11:
+      RF95_FREQ = RF95_FREQ_11;
+      break;
+    case 12:
+      RF95_FREQ = RF95_FREQ_12;
+      break;
+    case 13:
+      RF95_FREQ = RF95_FREQ_13;
+      break;
+    case 14:
+      RF95_FREQ = RF95_FREQ_14;
+      break;
     default:
 	    RF95_FREQ = RF95_FREQ_0;
 	    break;
@@ -239,6 +284,9 @@ void setup() {
   tft.setTextColor(ST77XX_CYAN);
   tft.setTextSize(1);
   tft.setCursor(0, 30);
+  tft.print("Version ");
+  tft.print(BS_VERSION);
+  tft.setCursor(0, 50);
   tft.println("Waiting for GPS...");
   tft.print("...on Channel ");
   tft.print(radio_channel);
@@ -257,6 +305,12 @@ int heading = 0;
 bool updatedGPSFix = false;
 int updateDisplayCnt = 0;
 
+// MAIN PROCESSING LOOP
+//  - Check button press
+//  - Check for messages from remote GPS
+//  - Check for message from local GPS
+//  - Read the compass
+//  - Call display update accordingly
 void loop() {
 
   ////////////////////////////////////////////
@@ -359,15 +413,17 @@ void loop() {
     //radioBuf[inIndex] = 0; // put a null delimiter on string
     gps_len = inIndex;
     if(!strncmp((const char *) &radioBuf[3], "GGA",3)){
+/*
 #ifdef SERIAL_CONSOLE
       Serial.write(radioBuf,inIndex);
       Serial.print(" ");
       Serial.println(display_mode);
 #endif
+*/
       // Now update display
       smartDelay(500, 1);
-      if(gps.sentencesWithFix()){
-         updatedGPSFix = true;   // update loop indicator that we've had a new GPS fix
+      if(gpsBS.sentencesWithFix()){ //[v1.35]
+         updatedGPSFix = true;   // update loop indicator that we've had a new local GPS fix
       }
     }
     inIndex = 0;
@@ -375,7 +431,7 @@ void loop() {
 #endif
 
   ////////////////////////////
-  //  Lastly, update the display if its time
+  //  // Lastly, update the display if its time - for either remote or local GPS fix
 
   if(((++updateDisplayCnt % 2) == 0) && updatedGPSFix)// only update display on every other instance of update GPS fix
   {
@@ -402,6 +458,7 @@ void loop() {
  *  Display the appropriate menu or display
  *  
  */
+
 static void updateDisplay(int display)
 {
   TinyGPSPlus *pGPS; 
@@ -629,8 +686,8 @@ static int getRadioChannel(void)
   // First, get radio_channel from flash
    if (EEPROM.isValid()) {
       radio_channel = (int) EEPROM.read(0); // read first location for channel
-      if(radio_channel > 7)
-        radio_channel = 0;  // only 8 channels, if we read higher, set to zero
+      if(radio_channel > MAX_OP_CHAN)
+        radio_channel = 0;  // only 15 channels, if we read higher, set to zero
    }
 
   // Loop for 5 secs and wait for button hit.  For each button hit
@@ -651,7 +708,7 @@ static int getRadioChannel(void)
         tft.setTextColor(ST77XX_WHITE);
         tft.setTextSize(1);
         tft.setCursor(0, 30);
-        if(radio_channel++ >= 7)
+        if(radio_channel++ >= MAX_OP_CHAN)
           radio_channel = 0;
         tft.print("Channel = ");
         tft.println(radio_channel);
